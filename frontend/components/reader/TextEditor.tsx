@@ -14,7 +14,7 @@ export default function TextEditor({ text, setText, handleFile }: Props) {
       <div className="flex items-start justify-between">
         <div>
           <h3 className="text-lg font-semibold text-sky-700">Your notes</h3>
-          <p className="text-xs text-sky-500 mt-1">Paste lecture notes, articles or any text here — AI will read it aloud.</p>
+          <p className="text-xs text-sky-500 mt-1">Paste lecture notes, articles or any text here — AI will read full paragraphs.</p>
         </div>
         <div className="text-sm text-sky-600">Words: <span className="font-medium">{text ? text.trim().split(/\s+/).length : 0}</span></div>
       </div>
@@ -23,7 +23,7 @@ export default function TextEditor({ text, setText, handleFile }: Props) {
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="Paste lecture notes, articles or any text here..."
-        className="w-full h-64 mt-4 p-4 rounded-md border border-sky-200 bg-white text-sm resize-y shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+        className="w-full min-h-[320px] mt-4 p-4 rounded-md border border-sky-200 bg-white text-sm resize-y shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
       />
 
       <div className="mt-3 flex items-center gap-3">
@@ -40,7 +40,7 @@ export default function TextEditor({ text, setText, handleFile }: Props) {
           Clear
         </button>
 
-        <div className="ml-auto text-xs text-sky-500">Tip: Use voice commands like “pause” or “resume”</div>
+        <div className="ml-auto text-xs text-sky-500">Tip: Use voice commands like “pause” or “resume” — reads by paragraph</div>
       </div>
     </div>
   );

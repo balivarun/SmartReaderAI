@@ -3,23 +3,23 @@
 import React, { useEffect, useRef, useState } from "react";
 import TextEditor from "../../components/reader/TextEditor";
 import Controls from "../../components/reader/Controls";
-import Preview from "../../components/reader/Preview";
-import VoiceControl from "../../components/reader/VoiceControl";
 import ProgressInfo from "../../components/reader/ProgressInfo";
 
 function splitIntoSentences(text: string) {
   if (!text) return [];
-  // crude sentence splitter: keeps punctuation with sentence
-  const re = /[^\n.!?]+[\n.!?]*/g;
-  const matches = text.match(re);
-  if (!matches) return [text];
-  return matches.map((s) => s.trim()).filter(Boolean);
+  // split into paragraphs: blank-line separated blocks. This treats
+  // consecutive newline(s) as paragraph separators so we read whole
+  // paragraphs instead of sentence-by-sentence.
+  return text
+    .split(/(?:\r?\n){2,}/)
+    .map((p) => p.replace(/\r?\n/g, " ").trim())
+    .filter(Boolean);
 }
 
 export default function Reader(): JSX.Element {
   const [text, setText] = useState<string>("");
-  // derive sentences from text instead of storing them in state to avoid
-  // calling setState synchronously inside an effect (causes cascading renders)
+  // derive paragraphs from text (we still call them sentences in code for
+  // backward compatibility) — we read whole paragraphs at a time.
   const sentences = React.useMemo(() => splitIntoSentences(text), [text]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -98,6 +98,12 @@ export default function Reader(): JSX.Element {
     if (!sentences || sentences.length === 0) return;
     const safeIndex = Math.max(0, Math.min(index, sentences.length - 1));
     speakSentence(safeIndex);
+    // When playback starts, enable voice command listening so the user can say
+    // "pause", "resume", etc. The recognition implementation is guarded by
+    // feature detection inside startListening().
+    try {
+      startListening();
+    } catch (_e) {}
   }
 
   function pause() {
@@ -123,6 +129,10 @@ export default function Reader(): JSX.Element {
       if (typeof window !== "undefined" && 'speechSynthesis' in window && window.speechSynthesis.cancel) {
         window.speechSynthesis.cancel();
       }
+    } catch (_e) {}
+    // Also stop voice recognition when playback is stopped.
+    try {
+      stopListening();
     } catch (_e) {}
     setIsPlaying(false);
   }
@@ -208,7 +218,8 @@ export default function Reader(): JSX.Element {
   }
 
   function startListening() {
-    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+    // Feature-detect Web Speech API (standard name first, then webkit prefixed).
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return setLastCommand("SpeechRecognition not supported in this browser");
     const rec = new SpeechRecognition();
     rec.continuous = true;
@@ -221,18 +232,24 @@ export default function Reader(): JSX.Element {
     };
     rec.onerror = (e: any) => setLastCommand("Voice recognition error: " + (e.error || e.message || ""));
     rec.onend = () => {
+      // recognition ended (possibly due to permission or explicit stop)
       setListening(false);
+      recognitionRef.current = null;
     };
-    rec.start();
-    recognitionRef.current = rec;
-    setListening(true);
-    setLastCommand("Listening for commands...");
+    try {
+      rec.start();
+      recognitionRef.current = rec;
+      setListening(true);
+      setLastCommand("Listening for commands...");
+    } catch (e: any) {
+      setLastCommand("Failed to start recognition: " + (e && e.message ? e.message : String(e)));
+    }
   }
 
   function stopListening() {
     if (recognitionRef.current) {
       try {
-        recognitionRef.current.stop();
+        if (typeof recognitionRef.current.stop === "function") recognitionRef.current.stop();
       } catch (_e) {}
       recognitionRef.current = null;
     }
@@ -297,8 +314,8 @@ export default function Reader(): JSX.Element {
         <p className="mt-1 text-sm opacity-90">Paste your notes and listen while you write. Control playback with voice or buttons.</p>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <main className="lg:col-span-2 space-y-4">
+      <div className="grid grid-cols-1 gap-6">
+        <main className="space-y-4">
           <TextEditor text={text} setText={setText} handleFile={handleFile} />
 
           <Controls
@@ -318,18 +335,11 @@ export default function Reader(): JSX.Element {
             <button className="px-4 py-2 rounded-md bg-white border text-sky-700" onClick={loadProgress}>Load progress</button>
           </div>
 
-          <VoiceControl
-            listening={listening}
-            toggleListening={() => (listening ? stopListening() : startListening())}
-            lastCommand={lastCommand}
-            supportsRecognition={!!supports.recognition}
-          />
+          {/* Voice control UI intentionally hidden — microphone is enabled automatically when playback starts. */}
         </main>
-
-        <aside className="space-y-4">
-          <Preview sentences={sentences} currentIndex={currentIndex} />
+        <div className="space-y-4">
           <ProgressInfo isPlaying={isPlaying} currentIndex={currentIndex} total={sentences.length} />
-        </aside>
+        </div>
       </div>
     </div>
   );

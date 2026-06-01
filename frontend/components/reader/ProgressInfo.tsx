@@ -13,7 +13,7 @@ export default function ProgressInfo({ isPlaying, currentIndex, total }: Props) 
     <div className="mt-4 p-3 bg-white rounded-lg shadow-sm border border-sky-50">
       <div className="flex items-center justify-between text-sm text-sky-700">
         <div>Status: <span className="font-medium text-sky-900">{isPlaying ? "Playing" : "Stopped"}</span></div>
-        <div>Sentence: <span className="font-medium text-sky-900">{Math.min(currentIndex + 1, total)}</span> / {total}</div>
+        <div>Paragraph: <span className="font-medium text-sky-900">{Math.min(currentIndex + 1, total)}</span> / {total}</div>
       </div>
 
       <div className="mt-3 w-full bg-sky-100 rounded-full h-2 overflow-hidden">
