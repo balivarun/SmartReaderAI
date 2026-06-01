@@ -1,10 +1,5 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "frontend/package.json",
-      "use": "@vercel/next"
-    }
-  ],
-  "routes": []
+  "note": "This repository uses a dedicated Vercel config for the frontend inside the `frontend/` folder.",
+  "info": "A per-project vercel.json was moved to frontend/vercel.json to avoid conflicts when the Vercel project root is set to `frontend`. If you want to customize build settings for the frontend, edit frontend/vercel.json. Delete this file if you prefer the repo-root configuration."
 }
