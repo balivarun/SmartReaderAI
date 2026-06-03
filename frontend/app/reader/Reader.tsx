@@ -32,6 +32,14 @@ export default function Reader(): JSX.Element {
   // (webkitSpeechRecognition) and the DOM type may not be present in TS config.
   const recognitionRef = useRef<any | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  // If true, recognition should automatically restart after onend while playback is active.
+  const autoRestartRef = useRef<boolean>(false);
+  const [logs, setLogs] = useState<string[]>([]);
+
+  function addLog(msg: string) {
+    const t = `${new Date().toLocaleTimeString()}: ${msg}`;
+    setLogs((s) => [t, ...s].slice(0, 50));
+  }
 
   useEffect(() => {
     // Reset currentIndex asynchronously when text changes. Performing the
@@ -102,7 +110,9 @@ export default function Reader(): JSX.Element {
     // "pause", "resume", etc. The recognition implementation is guarded by
     // feature detection inside startListening().
     try {
-      startListening();
+      // Start listening and enable auto-restart so recognition keeps running while playing.
+      // startListening is async (may prompt for mic permission); call without await.
+      void startListening(true);
     } catch (_e) {}
   }
 
@@ -187,27 +197,102 @@ export default function Reader(): JSX.Element {
 
   function saveProgress() {
     const payload = { text, currentIndex, rate };
-    localStorage.setItem("smartreader_progress", JSON.stringify(payload));
-    setLastCommand("Progress saved");
+    const idKey = "smartreader_user_id";
+    let id = localStorage.getItem(idKey);
+    if (!id) {
+      id = Math.random().toString(36).slice(2, 10);
+      localStorage.setItem(idKey, id);
+    }
+
+    // Try saving to backend; fall back to localStorage on failure.
+    const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
+    const url = apiBase ? `${apiBase}/api/progress` : `/api/progress`;
+    // If apiBase is empty, fetch will be relative to current origin.
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, text, currentIndex, rate }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Server error");
+        setLastCommand("Progress saved to server");
+      })
+      .catch(() => {
+        localStorage.setItem("smartreader_progress", JSON.stringify(payload));
+        setLastCommand("Progress saved locally (server unavailable)");
+      });
   }
 
   function loadProgress() {
-    const raw = localStorage.getItem("smartreader_progress");
-    if (!raw) return setLastCommand("No saved progress");
-    try {
-      const p = JSON.parse(raw);
-      if (p.text) setText(p.text);
-      if (typeof p.currentIndex === "number") setCurrentIndex(p.currentIndex);
-      if (typeof p.rate === "number") setRate(p.rate);
-      setLastCommand("Progress loaded");
-    } catch (_e) {
-      setLastCommand("Failed to load progress");
+    const idKey = "smartreader_user_id";
+    const id = localStorage.getItem(idKey);
+    if (!id) {
+      // Try to load from local storage as a fallback
+      const raw = localStorage.getItem("smartreader_progress");
+      if (!raw) return setLastCommand("No saved progress");
+      try {
+        const p = JSON.parse(raw);
+        if (p.text) setText(p.text);
+        if (typeof p.currentIndex === "number") setCurrentIndex(p.currentIndex);
+        if (typeof p.rate === "number") setRate(p.rate);
+        setLastCommand("Progress loaded (local)");
+      } catch (_e) {
+        setLastCommand("Failed to load progress");
+      }
+      return;
     }
+
+    const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
+    const url = apiBase ? `${apiBase}/api/progress/${encodeURIComponent(id)}` : `/api/progress/${encodeURIComponent(id)}`;
+    fetch(url)
+      .then((res) => {
+        if (!res.ok) throw new Error("Not found");
+        return res.json();
+      })
+      .then((p) => {
+        if (p.text) setText(p.text);
+        if (typeof p.currentIndex === "number") setCurrentIndex(p.currentIndex);
+        if (typeof p.rate === "number") setRate(p.rate);
+        setLastCommand("Progress loaded from server");
+      })
+      .catch(() => {
+        // fallback to local
+        const raw = localStorage.getItem("smartreader_progress");
+        if (!raw) return setLastCommand("No saved progress");
+        try {
+          const p = JSON.parse(raw);
+          if (p.text) setText(p.text);
+          if (typeof p.currentIndex === "number") setCurrentIndex(p.currentIndex);
+          if (typeof p.rate === "number") setRate(p.rate);
+          setLastCommand("Progress loaded (local fallback)");
+        } catch (_e) {
+          setLastCommand("Failed to load progress");
+        }
+      });
   }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
+    const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
+    const isDoc = /pdf|word|officedocument|msword|vnd\.openxmlformats-officedocument/.test(f.type || f.name);
+    if (isDoc && apiBase) {
+      // upload to backend for conversion
+      const fd = new FormData();
+      fd.append("file", f);
+      fetch(`${apiBase}/api/convert`, { method: "POST", body: fd })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("convert failed");
+          const txt = await res.text();
+          setText(txt);
+          setLastCommand(`Loaded ${f.name} (converted)`);
+        })
+        .catch(() => {
+          setLastCommand(`Failed to convert ${f.name}`);
+        });
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       const txt = String(reader.result || "");
@@ -217,36 +302,81 @@ export default function Reader(): JSX.Element {
     reader.readAsText(f);
   }
 
-  function startListening() {
+  async function startListening(autoRestart = false) {
     // Feature-detect Web Speech API (standard name first, then webkit prefixed).
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return setLastCommand("SpeechRecognition not supported in this browser");
+    // If already listening, avoid creating another instance
+    if (recognitionRef.current) return setLastCommand("Already listening");
+
+    // Ask for microphone permission explicitly via getUserMedia so browsers
+    // prompt early and the permission state is granted before starting recognition.
+    if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function") {
+      try {
+        addLog("Requesting microphone permission...");
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Immediately stop tracks; we only requested permission.
+        stream.getTracks().forEach((t) => t.stop());
+        addLog("Microphone permission granted");
+        setLastCommand("Microphone permission granted");
+      } catch (err: any) {
+        addLog("Microphone permission denied or error: " + (err && err.message ? err.message : String(err)));
+        setLastCommand("Microphone permission denied");
+        return;
+      }
+    }
+
     const rec = new SpeechRecognition();
     rec.continuous = true;
-    rec.interimResults = false;
-    rec.lang = "en-US";
+    // Set interimResults to true for more responsive recognition and partial transcripts
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    rec.lang = (navigator.language || "en-US");
+    rec.maxAlternatives = 1;
+
+    rec.onstart = () => {
+      setListening(true);
+      addLog("Recognition started");
+      setLastCommand("Listening for commands...");
+      recognitionRef.current = rec;
+      autoRestartRef.current = !!autoRestart;
+    };
     rec.onresult = (ev: any) => {
-      const transcript = ev.results[ev.results.length - 1][0].transcript.trim().toLowerCase();
+      // Prefer the most recent result; accumulate interim if needed.
+      const last = ev.results[ev.results.length - 1];
+      const transcript = last[0].transcript.trim().toLowerCase();
+      addLog("Result: " + transcript + (last.isFinal ? " (final)" : " (interim)"));
       setLastCommand(`Heard: ${transcript}`);
-      handleVoiceCommand(transcript);
+      if (last.isFinal) {
+        handleVoiceCommand(transcript);
+      }
     };
     rec.onerror = (e: any) => setLastCommand("Voice recognition error: " + (e.error || e.message || ""));
     rec.onend = () => {
-      // recognition ended (possibly due to permission or explicit stop)
+      // recognition ended (possibly due to permission, network, or explicit stop)
       setListening(false);
       recognitionRef.current = null;
+      setLastCommand((prev) => prev || "Recognition ended");
+      // If we should auto-restart (playback is active and autoRestartRef is true), try to restart.
+      if (autoRestartRef.current && isPlaying) {
+        // small delay before restarting to avoid rapid loops
+        setTimeout(() => {
+          try {
+            startListening(true);
+          } catch (_e) {}
+        }, 500);
+      }
     };
     try {
       rec.start();
-      recognitionRef.current = rec;
-      setListening(true);
-      setLastCommand("Listening for commands...");
     } catch (e: any) {
       setLastCommand("Failed to start recognition: " + (e && e.message ? e.message : String(e)));
     }
   }
 
   function stopListening() {
+    // disable auto-restart when explicitly stopping
+    autoRestartRef.current = false;
     if (recognitionRef.current) {
       try {
         if (typeof recognitionRef.current.stop === "function") recognitionRef.current.stop();
@@ -254,6 +384,15 @@ export default function Reader(): JSX.Element {
       recognitionRef.current = null;
     }
     setListening(false);
+  }
+
+  function toggleListening() {
+    if (recognitionRef.current) {
+      stopListening();
+    } else {
+      // start listening without forcing auto-restart (manual toggle)
+      void startListening(false);
+    }
   }
 
   function handleVoiceCommand(command: string) {
@@ -328,6 +467,10 @@ export default function Reader(): JSX.Element {
             next={next}
             rate={rate}
             setRate={updateRate}
+            listening={listening}
+            lastCommand={lastCommand}
+            toggleListening={toggleListening}
+            logs={logs}
           />
 
           <div className="flex gap-3">

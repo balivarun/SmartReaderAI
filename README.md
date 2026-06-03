@@ -1,52 +1,65 @@
 # SmartReaderAI
 
-Monorepo containing frontend (Next.js) and backend (Spring Boot).
+This repository contains a Next.js frontend and a Spring Boot backend for the SmartReaderAI project.
 
-This README explains how to deploy the frontend only to Vercel.
+## Overview
+- frontend/: Next.js + React UI using browser Speech Synthesis and Web Speech APIs.
+- backend/: Spring Boot application providing:
+  - Progress persistence (PostgreSQL)
+  - Basic authentication (register/login -> JWT)
+  - File conversion endpoint (`/api/convert`) using Apache Tika to extract text from PDF/Word
 
-## Deploying the frontend to Vercel
+## Running locally (frontend + backend)
 
-There are two recommended options to deploy just the `frontend` app to Vercel:
+Prerequisites:
+- Node.js 18+
+- Java 17+ / JDK matching Gradle toolchain
+- PostgreSQL running locally (or use a Docker container)
 
-### Option A — Use the provided `vercel.json` (automatic)
+1. Start PostgreSQL (example using Docker):
 
-This repository includes a `vercel.json` at the repository root that tells Vercel to build the `frontend` package using the Next.js builder. To deploy using this file:
+```bash
+docker run --name smartreader-postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=smartreader -p 5432:5432 -d postgres:15
+```
 
-1. Connect your GitHub/GitLab/Bitbucket repository in the Vercel dashboard.
-2. When creating a new project from the repository, Vercel should detect the `vercel.json` and build the frontend.
+2. Start the backend (Spring Boot)
 
-No additional configuration is required; the `vercel.json` instructs Vercel to run the Next.js builder against `frontend/package.json`.
+```bash
+cd backend
+./gradlew bootRun
+```
 
-### Option B — Set the project root to `frontend` in Vercel (recommended for clarity)
+The backend starts on port 8080 by default and expects a Postgres DB at `jdbc:postgresql://localhost:5432/smartreader` (configurable via environment variables in `backend/src/main/resources/application.properties`).
 
-1. In the Vercel dashboard, choose "Create New Project" and import your repository.
-2. In the project settings (Import and Build step), set the "Root Directory" (or "Project Settings > Git > Root Directory") to `frontend`.
-3. Vercel will then run the `build` script from `frontend/package.json`.
-
-This is a clean approach if you only ever want to deploy the frontend from this repository.
-
-## Local build and test
-
-To run the frontend locally:
+3. Start the frontend
 
 ```bash
 cd frontend
 npm install
+# Optionally set API base URL if backend is on different origin
+# echo "NEXT_PUBLIC_API_BASE_URL=http://localhost:8080" > .env.local
 npm run dev
 ```
 
-To build locally (same command Vercel runs):
-
-```bash
-npm run build
-```
+Open http://localhost:3000
 
 ## Notes
+- The frontend uses `NEXT_PUBLIC_API_BASE_URL` to configure the backend base URL. If not set, requests are made relative to the current origin.
+- Authentication endpoints:
+  - POST /api/auth/register { username, password }
+  - POST /api/auth/login { username, password } -> returns { token }
+- Progress endpoints:
+  - POST /api/progress { id, text, currentIndex, rate }
+  - GET /api/progress/{id}
+- File conversion endpoint (multipart): POST /api/convert (form field `file`) -> returns extracted text
 
-- The `frontend/package.json` includes a `vercel-build` script to ensure Vercel runs `next build` when using the Vercel build pipeline.
-- If you need environment variables (for AI APIs or keys), set them in the Vercel project settings (Environment Variables) — do not commit secrets to the repository.
+## Security & Production
+- The JWT secret is set in `application.properties` via environment variable `JWT_SECRET`; change it to a secure random value in production.
+- CORS is currently permissive for development; tighten it for production.
+- The backend currently uses JPA `ddl-auto=update` for convenience; switch to migrations (Flyway/Liquibase) for production.
 
-If you want, I can also:
-- Add a minimal `.vercelignore` to speed uploads,
-- Configure preview/prod environment variable examples in `.env.example`,
-- Configure GitHub Actions to deploy automatically to Vercel (though Vercel has built-in Git integration).
+If you want, I can:
+- Add Docker Compose to run frontend, backend, and database together.
+- Add DB migrations and seed data.
+- Protect progress endpoints to require authentication (currently allowed for development).
+

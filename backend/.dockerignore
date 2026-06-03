@@ -1,0 +1,16 @@
+# Gradle and build artifacts
+.gradle
+build
+
+# Local properties
+.env
+
+# IDE files
+.idea
+*.iml
+
+# Git
+.git
+
+# OS
+.DS_Store
