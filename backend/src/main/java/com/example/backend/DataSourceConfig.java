@@ -2,6 +2,8 @@ package com.example.backend;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,6 +14,8 @@ import java.net.URI;
 
 @Configuration
 public class DataSourceConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(DataSourceConfig.class);
 
     @Bean
     public DataSource dataSource(Environment env,
@@ -72,6 +76,36 @@ public class DataSourceConfig {
                     url = effective;
                 }
             }
+        }
+
+        // If we are attempting to connect to a remote postgres instance ensure
+        // credentials are present. Connecting without credentials can cause the
+        // driver to attempt an OS user which will usually fail in containerized
+        // environments (e.g. "FATAL: role \"jadu\" does not exist").
+        if (url != null && url.startsWith("jdbc:postgresql://") && (user == null || user.isBlank())) {
+            // Allow localhost in dev to proceed without explicit credentials
+            if (!url.contains("localhost") && !url.contains("127.0.0.1")) {
+                throw new IllegalStateException("Database credentials not provided. Set DATABASE_URL with credentials or set DATABASE_USER and DATABASE_PASSWORD environment variables.");
+            }
+        }
+
+        // Log the target host and database (sanitized) for easier debugging in
+        // deployment logs. Do NOT log passwords.
+        try {
+            String uriStr = url;
+            if (uriStr != null && uriStr.startsWith("jdbc:postgresql://")) {
+                uriStr = uriStr.substring("jdbc:".length()); // -> postgresql://host/...
+            }
+            if (uriStr != null) {
+                URI u = new URI(uriStr);
+                String host = u.getHost();
+                String path = u.getPath();
+                String db = (path != null && path.length() > 0) ? path.substring(1) : "";
+                log.info("Connecting to database host='{}' db='{}' user='{}'", host, db, (user == null ? "" : user));
+            }
+        } catch (Exception ex) {
+            // ignore logging errors — do not fail startup for logging only
+            log.debug("Failed to parse JDBC URL for logging", ex);
         }
 
         HikariConfig cfg = new HikariConfig();
