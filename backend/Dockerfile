@@ -5,7 +5,8 @@ WORKDIR /home/gradle/project
 # Copy project files
 COPY --chown=gradle:gradle . .
 # Build the fat jar (skip tests for faster builds; remove -x test if you want tests)
-RUN gradle clean bootJar --no-daemon -x test
+RUN chmod +x ./gradlew || true
+RUN ./gradlew clean bootJar --no-daemon -x test
 
 # Run stage
 FROM eclipse-temurin:17-jre-jammy
