@@ -9,6 +9,87 @@ This repository contains a Next.js frontend and a Spring Boot backend for the Sm
   - Basic authentication (register/login -> JWT)
   - File conversion endpoint (`/api/convert`) using Apache Tika to extract text from PDF/Word
 
+## Repository structure (full tree)
+Below is the full project folder structure to help you and interviewers quickly locate files and understand the project layout.
+
+```
+ (Absolute Path: /home/jadu/projects/SmartReaderAI)/
+ 	README.md
+ 	vercel.json
+ 	backend/
+ 		build.gradle
+ 		gradlew
+ 		gradlew.bat
+ 		HELP.md
+ 		settings.gradle
+ 		build/
+ 			detected build artifacts, classes, libs, reports, resources
+ 		gradle/
+ 			distribution wrapper files
+ 		src/
+ 			main/
+ 				java/
+ 					com/
+ 						example/
+ 				resources/
+ 				test/
+ 	frontend/
+ 		AGENTS.md
+ 		CLAUDE.md
+ 		eslint.config.mjs
+ 		global.d.ts
+ 		next-env.d.ts
+ 		next.config.js
+ 		next.config.ts
+ 		package.json
+ 		postcss.config.mjs
+ 		README.md
+ 		tsconfig.json
+ 		app/
+ 			favicon.ico
+ 			globals.css
+ 			layout.tsx
+ 			page.tsx
+ 			reader/
+ 				Reader.tsx
+ 				components/
+ 					Controls.tsx
+ 					Preview.tsx
+ 					ProgressInfo.tsx
+ 					TextEditor.tsx
+ 					VoiceControl.tsx
+ 		components/
+ 			Header.tsx
+ 			icons.tsx
+ 			controls/
+ 				ControlBar.tsx
+ 				SpeedControl.tsx
+ 				VoiceCommandOverlay.tsx
+ 			reader/
+ 				Controls.tsx
+ 				NoteInput.tsx
+ 				Preview.tsx
+ 				ProgressInfo.tsx
+ 				ReaderPanel.tsx
+ 				TextEditor.tsx
+ 				VoiceControl.tsx
+ 			ui/
+ 				VoiceCommandHints.tsx
+ 				WaveformBars.tsx
+ 		hooks/
+ 			useTextToSpeech.ts
+ 			useVoiceCommands.ts
+ 		public/
+ 			file.svg
+ 			globe.svg
+ 			next.svg
+ 			vercel.svg
+ 			window.svg
+ 		types/
+ 			speech.d.ts
+
+```
+
 ## Running locally (frontend + backend)
 
 Prerequisites:
