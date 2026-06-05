@@ -197,17 +197,18 @@ export default function Reader(): JSX.Element {
 
   function saveProgress() {
     const payload = { text, currentIndex, rate };
-    const idKey = "smartreader_user_id";
-    let id = localStorage.getItem(idKey);
+    const id = localStorage.getItem("smartreader_user_id");
+
     if (!id) {
-      id = Math.random().toString(36).slice(2, 10);
-      localStorage.setItem(idKey, id);
+      // Not signed in / not synced — save locally only and prompt to sign in for cloud save.
+      localStorage.setItem("smartreader_progress", JSON.stringify(payload));
+      setLastCommand("Progress saved locally. Sign in to sync to the cloud.");
+      return;
     }
 
     // Try saving to backend; fall back to localStorage on failure.
     const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
     const url = apiBase ? `${apiBase}/api/progress` : `/api/progress`;
-    // If apiBase is empty, fetch will be relative to current origin.
     fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -218,16 +219,15 @@ export default function Reader(): JSX.Element {
         setLastCommand("Progress saved to server");
       })
       .catch(() => {
-        localStorage.setItem("smartreader_progress", JSON.stringify(payload));
+        localStorage.setItem(`smartreader_progress_${id}`, JSON.stringify(payload));
         setLastCommand("Progress saved locally (server unavailable)");
       });
   }
 
   function loadProgress() {
-    const idKey = "smartreader_user_id";
-    const id = localStorage.getItem(idKey);
+    const id = localStorage.getItem("smartreader_user_id");
     if (!id) {
-      // Try to load from local storage as a fallback
+      // load from local storage as a fallback
       const raw = localStorage.getItem("smartreader_progress");
       if (!raw) return setLastCommand("No saved progress");
       try {
@@ -257,7 +257,7 @@ export default function Reader(): JSX.Element {
       })
       .catch(() => {
         // fallback to local
-        const raw = localStorage.getItem("smartreader_progress");
+        const raw = localStorage.getItem(`smartreader_progress_${id}`) || localStorage.getItem("smartreader_progress");
         if (!raw) return setLastCommand("No saved progress");
         try {
           const p = JSON.parse(raw);
@@ -473,9 +473,10 @@ export default function Reader(): JSX.Element {
             logs={logs}
           />
 
-          <div className="flex gap-3">
-            <button className="px-4 py-2 rounded-md bg-white border text-sky-700" onClick={saveProgress}>Save progress</button>
-            <button className="px-4 py-2 rounded-md bg-white border text-sky-700" onClick={loadProgress}>Load progress</button>
+          <div className="flex gap-3 items-center">
+            <button className="btn btn-primary" onClick={saveProgress}>Save progress</button>
+            <button className="btn btn-secondary" onClick={loadProgress}>Load progress</button>
+            <div className="text-sm text-ink-400">Cloud sync requires sign-in — <a href="/sign-in" className="underline">Sign in</a></div>
           </div>
 
           {/* Voice control UI intentionally hidden — microphone is enabled automatically when playback starts. */}
