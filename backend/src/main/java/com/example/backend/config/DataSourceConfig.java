@@ -1,4 +1,4 @@
-package com.example.backend;
+package com.example.backend.config;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -27,14 +27,9 @@ public class DataSourceConfig {
         String user = fallbackUser;
         String pass = fallbackPass;
 
-        // Use DATABASE_URL if present, otherwise fall back to the configured jdbc url.
         String effective = (databaseUrl != null && !databaseUrl.isBlank()) ? databaseUrl : fallbackUrl;
         if (effective != null && !effective.isBlank()) {
-            // Support multiple formats: full JDBC url (jdbc:postgresql://...), or
-            // DATABASE_URL in the form postgres://user:pass@host:port/dbname
             if (effective.startsWith("jdbc:")) {
-                // Handle jdbc URLs that may incorrectly include user:pass@host (some platforms provide this)
-                // e.g. jdbc:postgresql://user:pass@host:5432/db -> extract credentials
                 if (effective.startsWith("jdbc:postgresql://") && effective.contains("@")) {
                     try {
                         String afterScheme = effective.substring("jdbc:postgresql://".length());
@@ -56,7 +51,7 @@ public class DataSourceConfig {
                     URI uri = new URI(effective);
                     String host = uri.getHost();
                     int port = uri.getPort();
-                    String path = uri.getPath(); // /dbname
+                    String path = uri.getPath();
                     String db = (path != null && path.length() > 0) ? path.substring(1) : "";
                     String userInfo = uri.getUserInfo();
                     if (userInfo != null) {
@@ -68,33 +63,24 @@ public class DataSourceConfig {
                     sb.append("jdbc:postgresql://").append(host != null ? host : "");
                     if (port != -1) sb.append(":").append(port);
                     sb.append("/").append(db);
-                    // include query if present
                     if (uri.getQuery() != null) sb.append("?").append(uri.getQuery());
                     url = sb.toString();
                 } catch (Exception e) {
-                    // fallback to provided jdbc url
                     url = effective;
                 }
             }
         }
 
-        // If we are attempting to connect to a remote postgres instance ensure
-        // credentials are present. Connecting without credentials can cause the
-        // driver to attempt an OS user which will usually fail in containerized
-        // environments (e.g. "FATAL: role \"jadu\" does not exist").
         if (url != null && url.startsWith("jdbc:postgresql://") && (user == null || user.isBlank())) {
-            // Allow localhost in dev to proceed without explicit credentials
             if (!url.contains("localhost") && !url.contains("127.0.0.1")) {
                 throw new IllegalStateException("Database credentials not provided. Set DATABASE_URL with credentials or set DATABASE_USER and DATABASE_PASSWORD environment variables.");
             }
         }
 
-        // Log the target host and database (sanitized) for easier debugging in
-        // deployment logs. Do NOT log passwords.
         try {
             String uriStr = url;
             if (uriStr != null && uriStr.startsWith("jdbc:postgresql://")) {
-                uriStr = uriStr.substring("jdbc:".length()); // -> postgresql://host/...
+                uriStr = uriStr.substring("jdbc:".length());
             }
             if (uriStr != null) {
                 URI u = new URI(uriStr);
@@ -104,7 +90,6 @@ public class DataSourceConfig {
                 log.info("Connecting to database host='{}' db='{}' user='{}'", host, db, (user == null ? "" : user));
             }
         } catch (Exception ex) {
-            // ignore logging errors — do not fail startup for logging only
             log.debug("Failed to parse JDBC URL for logging", ex);
         }
 
@@ -112,7 +97,6 @@ public class DataSourceConfig {
         cfg.setJdbcUrl(url);
         if (user != null && !user.isBlank()) cfg.setUsername(user);
         if (pass != null && !pass.isBlank()) cfg.setPassword(pass);
-        // reasonable defaults
         cfg.setMaximumPoolSize(10);
         cfg.setMinimumIdle(1);
         return new HikariDataSource(cfg);

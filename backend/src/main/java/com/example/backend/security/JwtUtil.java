@@ -1,4 +1,4 @@
-package com.example.backend;
+package com.example.backend.security;
 
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -16,8 +16,6 @@ public class JwtUtil {
     private final long expirationMs;
 
     public JwtUtil(@Value("${app.jwt.secret}") String secret, @Value("${app.jwt.expiration-ms}") long expirationMs) {
-        // In production, secret should be a long, random value. Here we derive a key and ensure
-        // it meets the minimum length requirements for HMAC-SHA keys by padding if necessary.
         byte[] bs = secret.getBytes();
         if (bs.length < 32) {
             byte[] padded = new byte[32];

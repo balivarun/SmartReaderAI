@@ -1,14 +1,14 @@
-package com.example.backend;
+package com.example.backend.dto;
 
-public class Progress {
+public class ProgressDto {
     private String id;
     private String text;
     private int currentIndex;
     private double rate;
 
-    public Progress() {}
+    public ProgressDto() {}
 
-    public Progress(String id, String text, int currentIndex, double rate) {
+    public ProgressDto(String id, String text, int currentIndex, double rate) {
         this.id = id;
         this.text = text;
         this.currentIndex = currentIndex;

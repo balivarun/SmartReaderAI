@@ -1,7 +1,8 @@
-package com.example.backend;
+package com.example.backend.controller;
 
-import org.apache.tika.Tika;
+import com.example.backend.service.UploadService;
 import org.apache.tika.exception.TikaException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,13 +17,14 @@ import java.io.IOException;
 @RequestMapping("/api")
 public class UploadController {
 
-    private final Tika tika = new Tika();
+    @Autowired
+    private UploadService uploadService;
 
     @PostMapping(path = "/convert", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> convert(@RequestPart("file") MultipartFile file) {
         if (file == null || file.isEmpty()) return ResponseEntity.badRequest().body("No file");
         try {
-            String text = tika.parseToString(file.getInputStream());
+            String text = uploadService.extractText(file);
             return ResponseEntity.ok().body(text);
         } catch (IOException | TikaException e) {
             return ResponseEntity.status(500).body("Failed to extract text: " + e.getMessage());
